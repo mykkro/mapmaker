@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MapMaker — Fantasy World Generator</title>
+<style>
+  :root{
+    --bg:#1b1d22; --panel:#24262c; --panel2:#2c2f36; --border:#3a3d45;
+    --text:#e8e6df; --muted:#9a9ca3; --accent:#c9a24b; --accent2:#5fa8d3;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; font-family:"Segoe UI",Georgia,serif; background:var(--bg); color:var(--text);
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  header{
+    display:flex; align-items:center; gap:16px; padding:8px 16px;
+    background:linear-gradient(180deg,#2a2d34,#1f2127); border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  header h1{ font-size:18px; margin:0; letter-spacing:1px; color:var(--accent); font-weight:600;}
+  header .sub{ color:var(--muted); font-size:12px;}
+  header .spacer{flex:1;}
+  header button{ margin-left:6px; }
+  .layout{ flex:1; display:flex; min-height:0; }
+  aside{
+    width:290px; background:var(--panel); border-right:1px solid var(--border);
+    overflow-y:auto; padding:10px 14px 30px; flex-shrink:0;
+  }
+  aside h2{
+    font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--accent2);
+    margin:18px 0 8px; border-bottom:1px solid var(--border); padding-bottom:4px;
+  }
+  aside h2:first-child{ margin-top:4px; }
+  .field{ margin-bottom:10px; }
+  .field label{ display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:3px;}
+  .field label span.val{ color:var(--text); font-variant-numeric: tabular-nums; }
+  input[type=range]{ width:100%; accent-color: var(--accent); }
+  input[type=text]{
+    width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    padding:5px 7px; border-radius:4px; font-size:12px;
+  }
+  .row{ display:flex; gap:8px; }
+  .row > *{ flex:1; }
+  .checks label{
+    display:flex; align-items:center; gap:7px; font-size:12px; padding:3px 0; cursor:pointer; color:var(--text);
+  }
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:5px;
+    padding:6px 11px; font-size:12px; cursor:pointer;
+  }
+  button:hover{ border-color:var(--accent); color:var(--accent); }
+  button.primary{ background:var(--accent); color:#2a2208; border-color:var(--accent); font-weight:600; }
+  button.primary:hover{ filter:brightness(1.08); color:#2a2208; }
+  main{ flex:1; position:relative; background:#10151c; overflow:hidden; display:flex; }
+  .mapwrap{ flex:1; position:relative; overflow:hidden; cursor:grab; min-width:0; }
+  .mapwrap.panning{ cursor:grabbing; }
+  svg#world{ display:block; width:100%; height:100%; }
+  .legend{
+    position:absolute; left:10px; bottom:10px; background:rgba(20,22,26,.85);
+    border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:11px;
+    display:grid; grid-template-columns:repeat(2,auto); gap:3px 14px; color:var(--muted); pointer-events:none;
+  }
+  .legend .sw{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle;}
+  .hint{
+    position:absolute; right:10px; top:10px; background:rgba(20,22,26,.85); border:1px solid var(--border);
+    border-radius:6px; padding:6px 10px; font-size:11px; color:var(--muted); max-width:220px;
+  }
+  .village-panel{
+    width:420px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
+    display:flex; flex-direction:column; position:absolute; right:0; top:0; bottom:0;
+    transform:translateX(100%); transition:transform .25s ease; box-shadow:-6px 0 18px rgba(0,0,0,.4);
+  }
+  .village-panel.open{ transform:translateX(0); }
+  .village-head{
+    padding:10px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px;
+  }
+  .village-head h3{ margin:0; font-size:15px; color:var(--accent); flex:1; }
+  .village-head .tag{ font-size:11px; color:var(--muted); }
+  .village-svgwrap{ flex:0 0 auto; padding:10px; display:flex; justify-content:center; background:#0e1117; }
+  .village-controls{ padding:8px 14px; overflow-y:auto; flex:1; }
+  #loading{
+    position:absolute; inset:0; background:rgba(10,12,15,.6); display:flex; align-items:center; justify-content:center;
+    font-size:13px; color:var(--accent); letter-spacing:1px; z-index:5; pointer-events:none; opacity:0; transition:opacity .15s;
+  }
+  #loading.show{ opacity:1; }
+  .settlement-marker{ cursor:pointer; }
+  .settlement-marker:hover circle.pin{ filter:brightness(1.3); }
+  .zoomctrls{ position:absolute; right:10px; bottom:10px; display:flex; flex-direction:column; gap:4px; }
+  .zoomctrls button{ width:30px; height:30px; font-size:16px; line-height:1; }
+
+  .modal3d{
+    position:fixed; inset:0; background:#0a0c10; z-index:50; display:none; flex-direction:column;
+  }
+  .modal3d.open{ display:flex; }
+  .modal3d-head{
+    display:flex; align-items:center; gap:14px; padding:8px 14px; background:#1c1e24; border-bottom:1px solid var(--border); flex-shrink:0;
+  }
+  .modal3d-tabs{ display:flex; gap:6px; }
+  .tab3d{ background:var(--panel2); border:1px solid var(--border); color:var(--muted); }
+  .tab3d.active{ color:var(--accent); border-color:var(--accent); }
+  .tab3d:disabled{ opacity:.4; cursor:not-allowed; }
+  .hint3d{ font-size:11px; color:var(--muted); }
+  #canvas3dWrap{ flex:1; position:relative; }
+  #canvas3dWrap canvas{ display:block; width:100%; height:100%; }
+  #loading3d{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--accent); font-size:13px; letter-spacing:1px; background:rgba(10,12,16,.5); pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>⛰ MapMaker</h1>
+  <div class="sub">Layered fantasy world generator — SVG</div>
+  <div class="spacer"></div>
+  <button id="btnExportWorld">Export World SVG</button>
+  <button id="btn3D">🧊 3D View</button>
+  <button id="btnRandomSeed">🎲 New Seed</button>
+  <button class="primary" id="btnRegen">Regenerate</button>
+</header>
+
+<div class="layout">
+  <aside>
+    <h2>World Seed</h2>
+    <div class="field">
+      <label>Seed</label>
+      <input type="text" id="seedInput" value="valebrook">
+    </div>
+
+    <h2>Shape &amp; Terrain</h2>
+    <div class="field">
+      <label>World Detail (grid) <span class="val" id="v_cols"></span></label>
+      <input type="range" id="cols" min="60" max="300" value="140">
+    </div>
+    <div class="field">
+      <label>Sea Level <span class="val" id="v_seaLevel"></span></label>
+      <input type="range" id="seaLevel" min="20" max="70" value="44">
+    </div>
+    <div class="field">
+      <label>Mountains <span class="val" id="v_mountain"></span></label>
+      <input type="range" id="mountain" min="0" max="100" value="55">
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="islandMode" checked style="width:auto;margin-right:6px;">Island shape (coastline on all sides)</label>
+    </div>
+
+    <h2>Climate</h2>
+    <div class="field">
+      <label>Temperature (cold↔hot) <span class="val" id="v_temp"></span></label>
+      <input type="range" id="temp" min="-100" max="100" value="10">
+    </div>
+    <div class="field">
+      <label>Rainfall / Moisture <span class="val" id="v_moist"></span></label>
+      <input type="range" id="moist" min="0" max="100" value="55">
+    </div>
+    <div class="field">
+      <label>Forest Density <span class="val" id="v_forest"></span></label>
+      <input type="range" id="forest" min="0" max="100" value="55">
+    </div>
+
+    <h2>Hydrology</h2>
+    <div class="field">
+      <label>River Count <span class="val" id="v_rivers"></span></label>
+      <input type="range" id="rivers" min="0" max="40" value="14">
+    </div>
+    <div class="field">
+      <label>Lakes / Ponds <span class="val" id="v_ponds"></span></label>
+      <input type="range" id="ponds" min="0" max="20" value="6">
+    </div>
+
+    <h2>Civilization</h2>
+    <div class="field">
+      <label>Settlements <span class="val" id="v_settle"></span></label>
+      <input type="range" id="settle" min="1" max="40" value="16">
+    </div>
+    <div class="field">
+      <label>Road Curviness <span class="val" id="v_curve"></span></label>
+      <input type="range" id="curve" min="0" max="100" value="35">
+    </div>
+
+    <h2>Layers</h2>
+    <div class="checks" id="layerChecks">
+      <label><input type="checkbox" data-layer="terrain" checked> Terrain / Biomes / Water</label>
+      <label><input type="checkbox" data-layer="mountains" checked> Mountains</label>
+      <label><input type="checkbox" data-layer="cliffs" checked> Cliffs</label>
+      <label><input type="checkbox" data-layer="rivers" checked> Rivers &amp; Lakes</label>
+      <label><input type="checkbox" data-layer="forests" checked> Forests / Foliage</label>
+      <label><input type="checkbox" data-layer="roads" checked> Roads</label>
+      <label><input type="checkbox" data-layer="bridges" checked> Bridges</label>
+      <label><input type="checkbox" data-layer="caves" checked> Caves</label>
+      <label><input type="checkbox" data-layer="settlements" checked> Settlements</label>
+      <label><input type="checkbox" data-layer="labels" checked> Labels</label>
+    </div>
+  </aside>
+
+  <main>
+    <div class="mapwrap" id="mapwrap">
+      <div id="loading">⏳ Generating world…</div>
+      <svg id="world" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="legend" id="legend"></div>
+      <div class="hint">Scroll to zoom, drag to pan.<br>Click a settlement marker to open its local detail view (buildings, streets, foliage).</div>
+      <div class="zoomctrls">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">−</button>
+        <button id="zoomReset">⤾</button>
+      </div>
+    </div>
+
+    <div class="village-panel" id="villagePanel">
+      <div class="village-head">
+        <h3 id="villageName">—</h3>
+        <span class="tag" id="villageTag"></span>
+        <button id="btnRenameVillage" title="Rename settlement">✎</button>
+        <button id="btnCloseVillage">✕</button>
+      </div>
+      <div class="village-svgwrap">
+        <svg id="village" xmlns="http://www.w3.org/2000/svg" width="380" height="380"></svg>
+      </div>
+      <div class="village-controls">
+        <h2 style="margin-top:4px;">Local Layout</h2>
+        <div class="field">
+          <label>Building Density <span class="val" id="v_bdens"></span></label>
+          <input type="range" id="bdens" min="10" max="100" value="60">
+        </div>
+        <div class="field">
+          <label>Foliage Density <span class="val" id="v_fdens"></span></label>
+          <input type="range" id="fdens" min="0" max="100" value="55">
+        </div>
+        <div class="field">
+          <label>Street Curviness <span class="val" id="v_scurve"></span></label>
+          <input type="range" id="scurve" min="0" max="100" value="30">
+        </div>
+        <div class="field">
+          <label><input type="checkbox" id="foliageTop" style="width:auto;margin-right:6px;">Render foliage above buildings/roads</label>
+        </div>
+        <h2>Local Layers</h2>
+        <div class="checks" id="localLayerChecks">
+          <label><input type="checkbox" data-llayer="ground" checked> Ground / Water</label>
+          <label><input type="checkbox" data-llayer="plots" checked> Plots</label>
+          <label><input type="checkbox" data-llayer="walls" checked> Walls &amp; Gates</label>
+          <label><input type="checkbox" data-llayer="roads" checked> Streets &amp; Bridge</label>
+          <label><input type="checkbox" data-llayer="buildings" checked> Buildings</label>
+          <label><input type="checkbox" data-llayer="foliage" checked> Foliage / Trees</label>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <button id="btnRerollVillage" style="width:100%;">🎲 Reroll Local Layout</button>
+        </div>
+        <div class="field">
+          <button id="btnExportVillage" style="width:100%;">Export Local SVG</button>
+        </div>
+        <div class="field">
+          <button id="btnVillage3D" style="width:100%;">🧊 Preview Local in 3D</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal3d" id="modal3d">
+  <div class="modal3d-head">
+    <strong id="modal3dTitle">3D Preview</strong>
+    <div class="modal3d-tabs">
+      <button id="tab3dWorld" class="tab3d active">World</button>
+      <button id="tab3dVillage" class="tab3d" disabled>Local Village</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="hint3d">Left-drag: orbit · Right-drag / Shift-drag: pan · Scroll: zoom</span>
+    <button id="btnClose3D">✕</button>
+  </div>
+  <div id="canvas3dWrap"></div>
+</div>
+
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- Core utilities -->
+<script src="js/core/utils.js"></script>
+
+<!-- World generation, split by layer -->
+<script src="js/world/biomes.js"></script>
+<script src="js/world/terrain.js"></script>
+<script src="js/world/hydrology.js"></script>
+<script src="js/world/settlements.js"></script>
+<script src="js/world/roads.js"></script>
+<script src="js/world/caves.js"></script>
+<script src="js/world/worldgen.js"></script>
+<script src="js/world/village.js"></script>
+
+<!-- SVG rendering -->
+<script src="js/render/svg-utils.js"></script>
+<script src="js/render/world-view.js"></script>
+<script src="js/render/village-view.js"></script>
+
+<!-- 3D preview -->
+<script src="js/3d/viewer3d.js"></script>
+
+<!-- Application controller (UI wiring) -->
+<script src="js/app.js"></script>
+</body>
+</html>
